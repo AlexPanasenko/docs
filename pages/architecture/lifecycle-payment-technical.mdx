@@ -139,64 +139,65 @@ Daemon Mina определен в строке [mina.ml](https://github.com/mina
 
 ### Client_rpc
 
-In [daemon_rpcs.ml](https://github.com/minaprotocol/mina/tree/master/src/lib/daemon_rpcs/daemon_rpcs.ml), we define the concrete RPC calls that the client uses to communicate to the daemon. We use [Async](https://opensource.janestreet.com/async/)'s RPC library for this. `Send_payments` defined the RPC call we use to send the payment: the query type is the input -- the payments we want to send -- and the response is the output -- in this case `unit`, because we don't get any meaningful feedback other than "the payment has been enqueued" on success.
+В [daemon_rpcs.ml] (https://github.com/minaprotocol/mina/tree/master/src/lib/daemon_rpcs/daemon_rpcs.ml) мы определяем конкретные вызовы RPC, которые клиент использует для связи с daemon. Для этого мы используем RPC-библиотеку [Async](https://opensource.janestreet.com/async/). `Send_payments` определяет вызов RPC, который мы используем для отправки платежа: тип запроса (ввод) -- платежи, которые мы хотим отправить -- и ответ (вывод) -- в данном случае `unit`, потому что мы не получаем никакой значимой обратной связи, кроме сообщения "платеж был запрошен" в случае успеха.
 
-### Schedule payment into Transaction pool
+### График платежей в пул транзакций
 
-Back in [mina_main.ml](https://github.com/minaprotocol/mina/tree/master/src/app/cli/src/mina_main.ml), we invoke `send_payment` in [Run](#run), that delegates to `schedule_payment` -- here we enqueue the payment into the [Transaction Pool](#transaction-pool).
+Возвращаясь в [mina_main.ml](https://github.com/minaprotocol/mina/tree/master/src/app/cli/src/mina_main.ml), мы вызываем `send_payment` в [Run](#run), который делегирует `schedule_payment` -- здесь мы заносим платеж в [пул транзакций](#transaction-pool).
+
 
 ## Mina_lib
 
-To create a `Run` instance we'll need to go to [mina_lib.ml](https://github.com/minaprotocol/mina/tree/master/src/lib/mina_lib/mina_lib.ml) where we wire all subsystems together at the value level. This is in contrast to [mina_main.ml](#main) where we wire all the subsystems together at the module level.
+Для создания экземпляра `Run` нам нужно зайти в [mina_lib.ml](https://github.com/minaprotocol/mina/tree/master/src/lib/mina_lib/mina_lib.ml), где мы соединим все подсистемы вместе на уровне значений. Это контрастирует с [mina_main.ml](#main), где мы соединяем все подсистемы вместе на уровне модулей.
 
-It's here where we can trace the path of the payment from the transaction pool forwards. Let's sketch that out before diving deeper into each of the subsystems:
+Здесь мы можем проследить путь платежа из пула транзакций. Давайте сделаем набросок, прежде чем углубиться в каждую из подсистем:
 
-1. The [transaction pool](#transaction-pool) broadcasts diffs from the transaction pool through to the [network](#network)
-2. The [proposer](#proposer) reads payments from the transaction pool when it's time to make a transition from one blockchain state to another, those payments are part of a diff to update a [staged-ledger](#staged-ledger) which is committed to inside the new blockchain state. [External transitions](#external-transition) are emitted.
-3. The [network](#network) and the [proposer](#proposer) feed [external transitions](#external-transition) containing information on how to update a [staged-ledger](#staged-ledger) with the new payment buffered to the [ledger builder controller](#ledger-builder-controller)
-4. The [ledger builder controller](#ledger-builder-controller) figures out where this [external transition](#external-transition) fits in it's tree of possible forks. If this happens to extend our "best" path (the state upon which we will propose later) then we do an expensive materialization step to create a [tip](#tip) holding the new [staged ledger](#staged-ledger) and emit this strongest tip over the [network](#network). Healthy clients only forward tips they locally think are the strongest.
+1. [Пул транзакций](#transaction-pool) передает диффы от пула транзакций до [сети](#network).
+2. [Автор предложения](#proposer) считывает платежи из пула транзакций, когда наступает время перехода из одного состояния блокчейна в другое. Эти платежи являются частью диффа для обновления [распределенного реестра](#stage-ledger), который предназначен для работы в новом состоянии блокчейна. Эмитируются [внешние переходы](#external-transition).
+3. [Cеть](#network) и [автор предложения](#proposer) питают [внешние переходы](#external-transition), содержащие информацию об обновлении [распределенного реестра](#stage-ledger), при этом новый платеж буферизируется на [контроллер строителя реестра](#ledger-builder-controller).
+4. [Контроллер строителя реестра](#ledger-builder-controller) выясняет, где [внешний переход](#external-transition) вписывается в дерево возможных форков. Если это расширяет наш "лучший" путь (состояние, cсогласно которому мы сделаем предложение позже), тогда мы делаем дорогостоящий шаг по материализации [вершины](#tip), удерживающей новый [распределенный реестр](#stage-ledger) и выпускаем эту сильнейшую вершину через [сеть](#network). Надежные клиенты передают только те вершины, которые они локально считают самыми сильными.
 
-## Transaction Pool
+## Пул транзакций
 
-Open up [transaction_pool.ml](https://github.com/minaprotocol/mina/tree/master/src/lib/transaction_poll/transaction_pool.ml)... TODO
+Откройте [transaction_pool.ml](https://github.com/minaprotocol/mina/tree/master/src/lib/transaction_poll/transaction_pool.ml)... TODO
 
-## Network
-
-TODO
-
-## Proposer
+## Сеть
 
 TODO
 
-## External Transition
+## Автор предложения
 
 TODO
 
-## Ledger-builder-controller
+## Внешний переход
 
 TODO
 
-## Staged-ledger
+## Контроллер строителя реестра
 
-A staged ledger can be regarded as a "Pending accounts database" that has transactions(payments, coinbase, and proof-fees) applied for which there are no snarks available yet.
-A staged ledger consists of the accounts state (what we currently call ledger) and a data structure called [parallel_scan.ml](https://github.com/minaprotocol/mina/tree/master/src/lib/parallel_scan/parallel_scan.ml). It keeps track of all the transactions that need to be snarked (grep for `Available_job.t`) to produce a single transaction snark that certifies a set of transactions. This is exposed as Aux in the staged ledger.
-Parallel scan is a tree like structure that stores statements needed to be proved. A statement can be of applying a single transaction `Base` or of composing other statements `Merge`. Snarking of these statements is delegated to snark-workers. The snark workers submit snarks for the corresponding statements which are used by the proposer to update the parallel scan state.
+TODO
 
-When the propser wins a block, the payments read from the transaction pool are sent to the staged ledger to create a diff `Staged_ledger_diff`.
-A diff consists of
+## Распределенный реестр
 
-1. Payments included in the block
-2. A list of proofs that prove some of the transactions (payments, coinbase, and proof-fees) from previous blocks
-3. Coinbase
+Распределенный реестр может рассматриваться как "База данных отложенных счетов", в которую занесены операции (платежи, монетная база и комиссии за доказательства), для которых еще нет ни одного SNARK.
+Распределенный реестр состоит из состояния счетов (то, что мы сейчас называем реестром) и структуры данных (называемой [parallel_scan.ml](https://github.com/minaprotocol/mina/tree/master/src/lib/parallel_scan/parallel_scan.ml)). В нем отслеживаются все транзакции, которые должны получить SNARK (grep для `Available_job.t`), с целью получения SNARK отдельной транзакции, который бы подтверждал набор транзакций. Это выдается в распределенном реестре как Aux.
+Параллельное сканирование представляет собой дерево, подобное структуре, которое хранит операции, которые должны быть подтверждены. Операция может заключаться в применении одной транзакции `Base` или в составлении других операций `Merge`. Снаркинг этих операций делегируется снарк-работникам. Снарк-работники подают SNARK для соответствующих операций, которые используются автором предложения для обновления состояния параллельного сканирования.
 
-There are two primary operations in staged ledger.
+Когда автор предложения выигрывает блок, платежи, считанные из пула транзакций, отправляются в распределенный реестр для создания диффа `Staged_ledger_diff`.
+Дифф состоит из:
 
-1. Creating a diff :
-   To include a payment from the transaction pool, the proposer needs to include snarks generated by its own snark-workers (or buy it from someone) which certifies some of the transactions added in previous blocks. The number of snarks needs to be twice the number of transactions being included in the block (an invariant of the aux data structure). These proofs are included in the diff along with the payments and coinbase.
-   The diff is then included in the external transition and broadcasted to the network.
+1. Платежи, включенные в блок
+2. Список доказательств, подтверждающих некоторые операции (платежи, монетная база и комиссии за доказательства) из предыдущих блоков
+3. Монетная база
 
-2. Applying a diff: Diffs from the node itself (Internal transitions) or from the network (External transitions) are then used to update the staged ledger by applying the payments to the ledger and updating the parallel scan state with the proofs. Applying a diff may produce a proof for a sequence of transactions that were included in the previous blocks.
+В распределенном реестре есть две основные операции.
 
-## Ledger
+1. Создание диффа :
+   Чтобы включить платеж из пула транзакций, автор предложения должен добавить снарки, сгенерированные его собственными снарк-работниками (или же купить их у кого-нибудь), которые удостоверяют некоторые из транзакций, добавленных в предыдущих блоках. Количество снарков должно быть в два раза больше количества транзакций, включаемых в блок (инвариант структуры aux data). Эти доказательства включаются в дифф наряду с платежами и монетной базой.
+   Затем diff включается во внешний переход и передается в сеть.
+
+2. Применение диффа: Диффы от самой ноды (Внутренние переходы) или от сети (Внешние переходы) затем используются для обновления распределенного реестра путем внесения платежей в реестр и обновления состояния параллельного сканирования с доказательствами. Применение диффа может произвести проверку последовательности транзакций, которые были включены в предыдущие блоки.
+
+## Реестр
 
 TODO
