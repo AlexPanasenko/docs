@@ -92,50 +92,50 @@ $ mina client send-payment \
 3. У получателя достаточно места для суммы s.t. переполнения не будет.
 4. Показатель [nonce аккаунта](#account-nonce) совпадает с показателем nonce внутри платежа.
 
-When we apply a payment we also cons it onto the [receipt chain](#receipt-chain-hash), and increment the account nonce.
+Когда мы производим платеж, мы также сохраняем его в [цепочке получения] (#receipt-chain-hash), и при этом увеличиваем параметр account nonce.
 
-Fees are handled out-of-band see the [fee excess system](#fee-excess).
+Комиссии обрабатываются статически (см. систему превышения комиссии)(#fee-excess).
 
-This is encoded inside the SNARK in [transaction_snark.ml](https://github.com/minaprotocol/mina/tree/master/src/lib/transaction_snark/transaction_snark.ml), specifically the `apply_tagged_transaction` function, although you'll need to look at how the bool flags are set in the `is_normal` case.
+Это закодировано внутри SNARK в [transaction_snark.ml](https://github.com/minaprotocol/mina/tree/master/src/lib/transaction_snark/transaction_snark.ml), а именно в функции `apply_tagged_transaction`, хотя вам придется посмотреть, как устанавливаются флаги bool в случае `is_normal`.
 
 It's captured outside the SNARK here: (TODO: where is this? Staged_ledger somewhere?)
 
 ### Account Nonce
 
-The [account_nonce.mli](https://github.com/minaprotocol/mina/tree/master/src/lib/mina_numbers/account_nonce.mli) is just a [nominal type](https://en.wikipedia.org/wiki/Nominal_type_system) around a natural number. This is used for protection against double-application of payments.
-The account nonce is incremented in the sender's the account whenever a payment is applied.
+[Account_nonce.mli](https://github.com/minaprotocol/mina/tree/master/src/lib/mina_numbers/account_nonce.mli) - это просто [номинальный тип](https://en.wikipedia.org/wiki/Nominal_type_system) вокруг натурального числа. Это используется для защиты от двойного использования платежей.
+Account nonce увеличивается в учетной записи отправителя всякий раз, когда платеж применен.
 
-### Receipt Chain Hash
+### Хэш цепи получения 
 
-The [receipt.mli](https://github.com/minaprotocol/mina/tree/master/src/lib/mina_base/receipt.mli) chain hash is the top hash of a [merkle list](#merkle-list) of payment payloads. This is used to prove that you actually made a payment to someone. Since Mina doesn't keep payment history, this is how you can prove to someone that your payment went through.
+Хэш цепи [receipt.mli](https://github.com/minaprotocol/mina/tree/master/src/lib/mina_base/receipt.mli) является верхним хэшем [списка Меркла](#merkle-list) платежных нагрузок. Он используется, чтобы доказать, что вы на самом деле сделали платеж кому-то. Так как Mina не ведет историю платежей, это то, как вы можете доказать кому-то, что ваш платеж прошел.
 
-How does it work?
+Как это работает?
 
-A merkle list is like a [merkle tree](https://en.wikipedia.org/wiki/Merkle_tree) but with one branch. As long as you keep your merkle list hashes, you can prove that any individual piece of data was part of the list if you know for sure what the top hash is.
+Лист Меркла подобен [дереву Меркла](https://en.wikipedia.org/wiki/Merkle_tree), но с одним ответвлением. До тех пор, пока вы храните хэши листа Меркла, вы можете доказать, что любой отдельный фрагмент данных был частью списка, если вы точно знаете, что такое верхний хэш.
 
-If it's important to prove your payment went through, you ask the receiver to start recording receipt chain hashs, and hand your payment payload over to the receiver. He can then check the top hash of their receipt chain to see if it includes your payload.
+Если важно доказать, что ваш платеж прошел, вы просите получателя начать записывать хеши цепочки получения, а также передаете ему вашу платежную нагрузку. Затем он может проверить верхний хэш своей цепочки получения, чтобы узнать, включает ли он вашу платежную нагрузку.
 
-## Take a break!
+## Сделайте перерыв!
 
-We've fully described all the components of a `Payment.t`. Congrats on making it this far!
+Мы полностью описали все компоненты `Payment.t`. Поздравляем с тем, что вы зашли так далеко!
 
-After a break, we'll be ready to dive into the daemon code.
+После перерыва мы будем готовы погрузиться в код daemon.
 
 ## Daemon
 
-The mina daemon is defined inline in [mina.ml](https://github.com/minaprotocol/mina/tree/master/src/app/cli/src/mina.ml). Search for the `daemon` function to see the CLI flags we use there. The daemon is optionally auto-started by the client if it doesn't already exist. We get configuration from a JSON configuration file (try first from `-f`, then from `$XDG_CONFIG_DIR/mina/daemon.json`, then from `/etc/mina/daemon.json`). We do a lot of setup here which leads up to invoking `Mina_main.Mina.Make` and then `Run`ing it. The details of those are described below.
+Daemon Mina определен в строке [mina.ml](https://github.com/minaprotocol/mina/tree/master/src/app/cli/src/mina.ml). Ищите функцию `daemon`, чтобы увидеть CLI-флаги, которые мы там используем. Клиент может опционально автоматически запускать Daemon, если он уже существует. Мы получаем конфигурацию из конфигурационного файла JSON (попробуйте сначала из `-f`, затем из `$XDG_CONFIG_DIR/mina/daemon.json`, затем из `/etc/mina/daemon.json`). Перед этим мы производим множество настроек, которые приводят к вызову `Mina_main.Mina.Make`, а затем запускаем его командой `Run`. Подробности описаны ниже.
 
-When we have the `Run` module, we can make an instance of the mina daemon at the value level, and set up any background processes and services.
+Имея модуль `Run`, мы можем создать экземпляр mina daemon на уровне значений, а также настроить любые фоновые процессы и сервисы.
 
 ## Main
 
-By the time you're reading this, hopefully we've tamed the beast that is [mina_main.ml](https://github.com/minaprotocol/mina/tree/master/src/app/cli/src/mina_main.ml). Here we wire the system together at the module level. What does this mean? We instantiate all the functors for the different subcomponents of the daemon. Eventually we create something that conforms to `Main_intf` (in this same file).
+К тому времени, как вы это читаете, надеемся, вам уже удалось приручить зверя, которым является [mina_main.ml](https://github.com/minaprotocol/mina/tree/master/src/app/cli/src/mina_main.ml). Здесь мы соединяем систему на модульном уровне. Что это значит? Мы инстанцируем все функторы для различных подкомпонентов daemon. В конце концов, мы создаем что-то, что соответствует `Main_intf` (в этом же файле).
 
-### Run functor
+### Запуск функтора
 
-At the bottom of [mina_main.ml](https://github.com/minaprotocol/mina/tree/master/src/app/cli/src/mina_main.ml), we define a `Run` functor that finally has the other side of the `rpc` call that the client makes to `send_payment`. Run contains the server-side implementations of all the RPC calls the client makes. It also is responsible for logic of setting up any RPC/webservers servers and background processes.
+В конце [mina_main.ml] (https://github.com/minaprotocol/mina/tree/master/src/app/cli/src/mina_main.ml) мы определяем функтор `Run`, который, наконец, имеет другую сторону вызова `rpc`, который клиент осуществляет для `send_payment`. Run содержит исполнение на стороне сервера всех вызовов RPC, которые делает клиент. Он также отвечает за логику настройки любых RPC/веб-серверов и фоновых процессов.
 
-Let's assume we have an instance of `Run.t` already created, and we'll circle back later.
+Давайте предположим, что у нас есть уже созданный экземпляр `Run.t`, и мы вернемся к нему позже.
 
 ### Client_rpc
 
